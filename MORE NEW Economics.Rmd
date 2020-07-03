@@ -1,0 +1,978 @@
+---
+title: "Economics Thesis NEW 11.06"
+author: "Anna Langener"
+date: "6/11/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+library(psych)
+library(ggplot2)
+library(kableExtra)
+library(tidyverse)
+library(tidyselect)
+library(dplyr)
+library(foreign)
+library(xtable)
+library(ltm)
+library(flextable)
+library(qgraph)
+library(graphicalVAR)
+library(psychonetrics)
+library(lavaan)
+library(semPlot)
+library(tidyr)
+library(ggcorrplot)
+library(qwraps2)
+library(lme4)
+library(lmerTest)
+library(fastDummies)
+library(readxl)
+
+setwd('/Users/annalangener/Desktop/OneDrive/Masterthesis/Psychology')
+
+## Load all Financial Diaries
+
+Financial.diary_long1 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/Financial diaries GR5+GR6.xlsx")
+Financial.diary_long2 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/financial diaries gr8.xlsx")
+Financial.diary_long3 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/financial diaries gr15.xlsx")
+Financial.diary_long4 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/financial diaries gr19.xlsx")
+Financial.diary_long5 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/financial diaries gr20.xlsx")
+Financial.diary_long6 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/financial diaries gr25.xlsx")
+Financial.diary_long7 <- read_excel("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/financial diaries gr26.xlsx")
+
+# Combine them in long format
+Financial.diary_long <- rbind(Financial.diary_long1,Financial.diary_long2,Financial.diary_long3,Financial.diary_long4,Financial.diary_long5,Financial.diary_long6,Financial.diary_long7)
+
+# Transfer them to wide format
+Financial.diary <- Financial.diary_long[,-c(4,5,6)]
+Financial.diary <- Financial.diary[!is.na(Financial.diary$ID_NR_VU),]
+Financial.diary <- spread(Financial.diary, Item, Amount)
+Financial.diary[is.na(Financial.diary)] <- 0
+Financial.diary <- Financial.diary[Financial.diary$Weeknr != 0,]
+
+### Load Baseline and monthly survey
+
+All_Rwanda <- as.data.frame(read.csv2("/Users/annalangener/Desktop/All_Rwanda_data_cleaned_06042020.csv", header = TRUE, na.strings = c(""," ","NA")))
+All_Rwanda <- All_Rwanda[All_Rwanda$ID_NR_VU != 41,] #Remove observation 41
+All_Rwanda <- All_Rwanda[All_Rwanda$Rgroupnr == "RWA005" |All_Rwanda$Rgroupnr == "RWA006" |All_Rwanda$Rgroupnr == "RWA008" | All_Rwanda$Rgroupnr == "RWA015"|All_Rwanda$Rgroupnr == "RWA019"| All_Rwanda$Rgroupnr == "RWA020" | All_Rwanda$Rgroupnr == "RWA025" |All_Rwanda$Rgroupnr == "RWA026",] 
+
+##Transfrom Date
+
+All_Rwanda$Cstartdate <- stringr::str_split_fixed(All_Rwanda$Cstartdate, " ", 2)[,1]
+
+All_Rwanda$Cstartdate <- as.Date(All_Rwanda$Cstartdate, "%d.%m.%y")
+All_Rwanda$StartMonth <- format(as.Date(All_Rwanda$Cstartdate), "%m")
+
+All_Rwanda$Cstartdate <- format(as.Date(All_Rwanda$Cstartdate), "%Y%m")
+
+## Load Inflation Rate
+Inflation <- as.data.frame(read.csv2("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/Inflation.csv", header = T))
+Inflation$Date <- as.Date(Inflation$Date, "%d.%m.%y")
+Inflation$Date <- format(as.Date(Inflation$Date), "%Y%m")
+Inflation$Cstartdate <- Inflation$Date 
+
+#Data_combined_Base <- as.data.frame(read.csv("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data_combined_Base.csv", header = T))
+```
+
+
+## Data Preperation
+Variables that we need: social support, income, empowerment, mental wellbeing, food security, personal health, household health, wealth (personal assets), and child morality
+```{r setup, include=FALSE}
+#Savings per months, per week, per day
+All_Rwanda$savinghowmuch_1[which(All_Rwanda$savinghowmuch_1 == "Question skipped")] <- NA 
+All_Rwanda$savinghowmuch_2[which(All_Rwanda$savinghowmuch_2 == "Question skipped")] <- NA
+All_Rwanda$savinghowmuch_3[which(All_Rwanda$savinghowmuch_3 == "Question skipped")] <- NA
+
+All_Rwanda$savinghowmuch_1 <- as.numeric(All_Rwanda$savinghowmuch_1) 
+All_Rwanda$savinghowmuch_2 <- as.numeric(All_Rwanda$savinghowmuch_2) 
+All_Rwanda$savinghowmuch_3 <- as.numeric(All_Rwanda$savinghowmuch_3) 
+
+All_Rwanda$debtamount_1[which(All_Rwanda$debtamount_1 == "Question skipped")] <- NA 
+All_Rwanda$debtamount_1 <- as.numeric(All_Rwanda$debtamount_1) 
+
+#Productive Assets
+All_Rwanda$prod1 <- recode(All_Rwanda$assetsmatrix1_1, "Yes" = 1, "No" = 0)
+All_Rwanda$prod2 <- recode(All_Rwanda$assetsmatrix1_2, "Yes" = 1, "No" = 0)
+All_Rwanda$prod3 <- recode(All_Rwanda$assetsmatrix1_3, "Yes" = 1, "No" = 0)
+All_Rwanda$prod4 <- recode(All_Rwanda$assetsmatrix1_4, "Yes" = 1, "No" = 0)
+All_Rwanda$prod5 <- recode(All_Rwanda$assetsmatrix1_5, "Yes" = 1, "No" = 0)
+All_Rwanda$prod6 <- recode(All_Rwanda$assetsmatrix1_6, "Yes" = 1, "No" = 0)
+
+for(i in 1:nrow(All_Rwanda)){
+All_Rwanda$prodsum[i] <- sum(All_Rwanda$prod1[i],All_Rwanda$prod2[i],All_Rwanda$prod3[i],All_Rwanda$prod4[i],All_Rwanda$prod5[i])
+}
+
+###Livestock
+All_Rwanda$livestock1 <- recode(All_Rwanda$livestocknumbers_1, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock2 <- recode(All_Rwanda$livestocknumbers_2, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock3 <- recode(All_Rwanda$livestocknumbers_3, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock4 <- recode(All_Rwanda$livestocknumbers_4, "Yes" = 1, "No" = 0)
+All_Rwanda$livestock5 <- recode(All_Rwanda$livestocknumbers_5, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock6 <- recode(All_Rwanda$livestocknumbers_6, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock7 <- recode(All_Rwanda$livestocknumbers_7, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock8 <- recode(All_Rwanda$livestocknumbers_8, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock9 <- recode(All_Rwanda$livestocknumbers_9, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock10 <- recode(All_Rwanda$livestocknumbers_10, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+All_Rwanda$livestock11 <- recode(All_Rwanda$livestocknumbers_11, "6" = 6, "5" = 5, "4" = 4, "3" = 3, "2" = 2, "1" = 1, "0" = 0)
+
+for(i in 1:nrow(All_Rwanda)){
+All_Rwanda$livestocksum[i] <- sum(All_Rwanda$livestock1[i],All_Rwanda$livestock3[i],All_Rwanda$livestock5[i], All_Rwanda$livestock6[i], All_Rwanda$livestock7[i])
+}
+
+## Education
+All_Rwanda$school2 <- recode(All_Rwanda$school,"Yes" = 1, "No" = 0)
+All_Rwanda$schoolatt2 <- recode(All_Rwanda$schoolatt, "Pre-primary (Nursery)" = 1,  "Primary" = 2, "Secondary" = 3, "Tertiary"  = 4, "Vocational" = 5)
+All_Rwanda$schoolcompleted <- recode(All_Rwanda$schoolcompleted,"None" = 0, "Pre-primary (Nursery)" = 1,  "Primary" = 2, "Secondary" = 3, "Tertiary"  = 4, "Vocational" = 5)
+
+
+## Occupation
+# Informal Business
+# Farming
+# Causal labour/ No occupation
+All_Rwanda$Basketsmaker <- 0
+All_Rwanda$Basketsmaker[All_Rwanda$occupationmain == "Baskets maker"] <- 1
+All_Rwanda$Basketsmaker[is.na(All_Rwanda$occupationmain)] <- NA
+
+All_Rwanda$Daylabourer <- 0
+All_Rwanda$Daylabourer[All_Rwanda$occupationmain == "Day labourer" ] <- 1
+All_Rwanda$Daylabourer[is.na(All_Rwanda$occupationmain)] <- NA
+
+All_Rwanda$Farmer <- 0
+All_Rwanda$Farmer[All_Rwanda$occupationmain == "Farmer not on own land" | All_Rwanda$occupationmain == "Farmer on own land"| All_Rwanda$occupationmain == "Farmer, crops on own land" | All_Rwanda$occupationmain == "Farmer, crops on rented land" | All_Rwanda$occupationmain == "Farmer, livestock on own land" | All_Rwanda$occupationmain == "Farmer, livestock on rented land"  ] <- 1
+All_Rwanda$Farmer[is.na(All_Rwanda$occupationmain)] <- NA
+
+
+All_Rwanda$Handcraft <- 0
+All_Rwanda$Handcraft[All_Rwanda$occupationmain == "Handcraft maker"  ] <- 1
+All_Rwanda$Handcraft[is.na(All_Rwanda$occupationmain)] <- NA
+
+All_Rwanda$MakingSellingBeer <- 0
+All_Rwanda$MakingSellingBeer[All_Rwanda$occupationmain == "Making and selling beer"] <- 1
+All_Rwanda$MakingSellingBeer[is.na(All_Rwanda$occupationmain)] <- NA
+
+All_Rwanda$MakingRepairClothes <- 0
+All_Rwanda$MakingRepairClothes[All_Rwanda$occupationmain == "Making/ repairing clothes" ] <- 1
+All_Rwanda$MakingRepairClothes[is.na(All_Rwanda$occupationmain)] <- NA
+
+
+All_Rwanda$MarketVendor <- 0
+All_Rwanda$MarketVendor[All_Rwanda$occupationmain == "Market vendor"] <- 1
+All_Rwanda$MarketVendor[is.na(All_Rwanda$occupationmain)] <- NA
+
+All_Rwanda$NoOccupation <- 0
+All_Rwanda$NoOccupation[All_Rwanda$occupationmain == "No occupation"] <- 1
+All_Rwanda$NoOccupation[is.na(All_Rwanda$occupationmain)] <- NA
+
+All_Rwanda$MakingSellingFood <- 0
+All_Rwanda$MakingSellingFood[All_Rwanda$occupationmain == "Restaurant /making and selling food"] <- 1
+All_Rwanda$MakingSellingFood[is.na(All_Rwanda$occupationmain)] <- NA
+        
+All_Rwanda$Shopkeeper <- 0
+All_Rwanda$Shopkeeper[All_Rwanda$occupationmain == "Shopkeeper"] <- 1
+All_Rwanda$Shopkeeper[is.na(All_Rwanda$occupationmain)] <- NA
+ 
+All_Rwanda$StreetVendor <- 0
+All_Rwanda$StreetVendor[All_Rwanda$occupationmain == "Street vendor"] <- 1
+All_Rwanda$StreetVendor[is.na(All_Rwanda$occupationmain)] <- NA
+ 
+
+## New Categories
+All_Rwanda$InformalWork <- 0
+All_Rwanda$InformalWork[All_Rwanda$occupationmain == "Street vendor" | All_Rwanda$occupationmain == "Shopkeeper" | All_Rwanda$occupationmain == "Market vendor" | All_Rwanda$occupationmain == "Making/ repairing clothes"] <- 1
+
+
+# Causal labour/ No occupation
+All_Rwanda$NoOccupation_Daylabourer <- 0
+All_Rwanda$NoOccupation_Daylabourer[All_Rwanda$occupationmain == "Day labourer" | All_Rwanda$occupationmain == "No occupation" ] <- 1
+
+#Farmer
+
+## HHsize
+
+##Insurance
+All_Rwanda$insurance2 <- recode(All_Rwanda$insurance, "Don't know" = -1, "No" = 0, "Yes, commercial/privately purchased health insurance" = 1, "Yes, MMI" = 1, "Yes, mutuelle or community based health insurance" = 1,"Yes, Rama/RSSB" = 1)
+All_Rwanda$insurance2[All_Rwanda$insurance2 == -1] <- NA
+
+
+###partner
+All_Rwanda$HusbandPartnerSameHousehold <- NA
+All_Rwanda$HusbandPartnerSameHousehold[All_Rwanda$partner == "<b>Husband</b> who lives in same household" |All_Rwanda$partner == "<b>Partner</b> who lives in the same household"] <- 1
+All_Rwanda$HusbandPartnerSameHousehold[All_Rwanda$partner != "<b>Husband</b> who lives in same household" & All_Rwanda$partner != "<b>Partner</b> who lives in the same household"] <- 0
+
+All_Rwanda$HusbandPartnerNotSameHousehold <- NA
+All_Rwanda$HusbandPartnerNotSameHousehold[All_Rwanda$partner == "<b>Husband</b> who does not currently live in household" |All_Rwanda$partner == "<b>Partner</b> who does not currently live in the household"] <- 1
+All_Rwanda$HusbandPartnerNotSameHousehold[All_Rwanda$partner != "<b>Husband</b> who does not currently live in household" & All_Rwanda$partner != "<b>Partner</b> who does not currently live in the household"] <- 0
+
+All_Rwanda$NoPartner <- NA
+All_Rwanda$NoPartner[All_Rwanda$partner == "No husband/partner"] <- 1
+All_Rwanda$NoPartner[All_Rwanda$partner != "No husband/partner"] <- 0
+
+All_Rwanda$PartnerDied  <- NA
+All_Rwanda$PartnerDied[All_Rwanda$partner == "Husband/partner has died"]  <- 1
+All_Rwanda$PartnerDied[All_Rwanda$partner != "Husband/partner has died"]  <- 0
+```
+
+Financial diaries 2
+```{r setup, include=FALSE}
+#"Grants"                 "Withdrawels"            "Loans"                 
+#"Sales"                  "Labour"                 "Real Estate Income"    
+#"Other Revenues"         "Gifts"                  "Basic Needs"           
+#"Deposits"               "Debts and Taxes"        "Business Investments"  
+#"Asset Investments"      "Real Estate Investment" "Other expenses"        
+#"Debts and Credits" 
+
+c("100WEEKS", "Received form other organizations like Church, etc." , "Received by Government (VUP, Ubudehe, …)",  "Cash given by Relatives/Friends/Family" ,"Social Gift" ,"Withdrawn from Bank, SACCOs, Saving group,etc.",                            
+ "Withdrawn from under the mattress/cookie jar/etc." ,"Loan from friends or relatives" ,"Loan from Bank/SACCOs/Saving group etc" ,          "Return of loan from relatives/friends","Market/Street/Buying and Resellling","Restaurant/Sewing/Arts/Crafts/Renting Tools/Machine",       "Farming sales: Crop/Fruit" ,"Sale of assets" ,"Sale of livestock (Animal/Derivates)",  "Other sales", "Wages for work/Building/Transport/Day labour","Renting house/room" ,"Renting a plot of land" ,"Selling a plot of land","Selling a house",             "Other Income" ,"Support given to Friends/Relatives" ,"Support given to Church/other organizations" ,"Food", "Clothes/Shoes",            "Education fees" ,"Health care" ,"Health Insurance","Water and Electricity" ,"Airtime" ,"Rental of House", "House improvement/Furniture/Kitchen gear","Travel (bus/taxi)","Money deposit at Bank/SACCO/Saving group/Tontine","Loan given to Friends/Relatives","Put under the mattress","Return payment of Loan from Friends/Relatives" , "Return Payment of Loan from SACCOs/Bank/Saving group etc.","Governmental taxes/market permits","Buying goods (Sorgum/Salt) for Resale at market/Street","Buying Farm inputs (Seeds/Fertilizer/Animal food)","Buying Inputs for business (food for Restaurant, Cloth, Rope) for processing","Paying for services (transport/worker, etc.)" , "Other investments","Support for market business (basket/table/bike/...)" ,"Support for enterprise (Tools/machinery/furniture/wages for servants)","Hiring Farmland" ,"Support for farming (tools/machinery)","Buying livestock (chicken/pig/goat/sheep/cow, etc.)/Veterinarian Services","Other Asset investments" ,"Buying a plot of Land" ,"Buying a house","Other expenses" , "Cash saved at the house","Formal Credits (Savings at bank/savings group/sacco/tontine/etc)","Formal Debts (sum of money owed to bank/savings group/etc.)","Informal Credits (sum of money lent to people)", "Informal Debts (sum of money borrowed from friends/relatives)")
+
+
+###### Basic need expenditure #####
+Total_Basicneed_expenditure <- 
+c("Airtime","Food", "Clothes/Shoes",  "Education fees" ,"Health care" ,"Health Insurance","Water and Electricity" ,"Rental of House", "House improvement/Furniture/Kitchen gear", "Travel (bus/taxi)")
+  
+index <- which(colnames(Financial.diary) %in% Total_Basicneed_expenditure )
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_Basicneed_expenditure[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+### Short
+Total_Basicneed_expenditure_short <- 
+c("Airtime","Food", "Clothes/Shoes","Water and Electricity" ,"Rental of House", "Travel (bus/taxi)", "House improvement/Furniture/Kitchen gear")
+  
+index <- which(colnames(Financial.diary) %in% Total_Basicneed_expenditure_short )
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_Basicneed_expenditure_short[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+
+###### Investments #####
+Total_BusinessInvestment <- c("Buying Farm inputs (Seeds/Fertilizer/Animal food)","Buying Inputs for business (food for Restaurant, Cloth, Rope) for processing","Paying for services (transport/worker, etc.)" , "Buying goods (Sorgum/Salt) for Resale at market/Street","Other investments")
+  
+index <- which(colnames(Financial.diary) %in% Total_BusinessInvestment )
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_BusinessInvestment[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+### Assets
+Total_AssetsInvestment <- c("Support for market business (basket/table/bike/...)" ,"Support for enterprise (Tools/machinery/furniture/wages for servants)","Hiring Farmland" ,"Support for farming (tools/machinery)","Buying livestock (chicken/pig/goat/sheep/cow, etc.)/Veterinarian Services","Other Asset investments")
+
+  
+index <- which(colnames(Financial.diary) %in% Total_AssetsInvestment )
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_AssetsInvestment[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+### Real Estate
+Total_RealEstateInvestment <- 
+c("Buying a plot of Land","Buying a house") 
+  
+index <- which(colnames(Financial.diary) %in% Total_RealEstateInvestment )
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_RealEstateInvestment[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+
+## Total Investment
+Total_Investment <- c("Buying Farm inputs (Seeds/Fertilizer/Animal food)","Buying Inputs for business (food for Restaurant, Cloth, Rope) for processing","Paying for services (transport/worker, etc.)" , "Buying goods (Sorgum/Salt) for Resale at market/Street","Other investments", "Support for market business (basket/table/bike/...)" ,"Support for enterprise (Tools/machinery/furniture/wages for servants)","Hiring Farmland" ,"Support for farming (tools/machinery)","Buying livestock (chicken/pig/goat/sheep/cow, etc.)/Veterinarian Services","Other Asset investments", "Buying a plot of Land","Buying a house")
+  
+index <- which(colnames(Financial.diary) %in% Total_Investment)
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_Investment[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+###### Income #####
+Total_income <- c("100WEEKS", "Received form other organizations like Church, etc." , "Received by Government (VUP, Ubudehe, …)",             "Cash given by Relatives/Friends/Family" ,"Social Gift" ,"Loan from friends or relatives" ,"Loan from Bank/SACCOs/Saving group etc" ,    "Return of loan from relatives/friends","Market/Street/Buying and Resellling","Restaurant/Sewing/Arts/Crafts/Renting Tools/Machine",       "Farming sales: Crop/Fruit" ,"Sale of assets" ,"Sale of livestock (Animal/Derivates)",  "Other sales", "Wages for work/Building/Transport/Day labour","Renting house/room" ,"Renting a plot of land" ,"Selling a plot of land","Selling a house",             "Other Income")
+
+index <- which(colnames(Financial.diary) %in% Total_income)
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_income[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+### Income without loans and assistance
+Total_income_without <- c("Market/Street/Buying and Resellling","Restaurant/Sewing/Arts/Crafts/Renting Tools/Machine", "Farming sales: Crop/Fruit" ,"Sale of assets" ,"Sale of livestock (Animal/Derivates)",  "Other sales", "Wages for work/Building/Transport/Day labour","Renting house/room" ,"Renting a plot of land" ,"Selling a plot of land","Selling a house", "Other Income")
+
+index <- which(colnames(Financial.diary) %in% Total_income_without)
+for(i in 1: nrow(Financial.diary)){
+Financial.diary$Total_income_without[i] <- rowSums(Financial.diary[i,index], na.rm = T)
+}
+
+### Expenditure Food ####
+
+
+
+```
+
+
+#Remove duplicated and missing values
+
+```{r setup, include=FALSE}
+All_Rwanda_B <- All_Rwanda %>% .[.$Rround == "0",]
+nrow(Financial.diary[Financial.diary$Weeknr == 1,]) #151 observations
+
+All_Rwanda_B <- All_Rwanda_B[which(All_Rwanda_B$ID_NR_VU %in% Financial.diary$ID_NR_VU),]
+All_Rwanda_B <- All_Rwanda_B[!duplicated(All_Rwanda_B$ID_NR_VU),]
+
+
+# remove 10 observation with missing diary
+
+## duplicated values
+Weeksindex <- c(0:100)
+duplicated <-   Financial.diary %>% .[.$Weeknr == Weeksindex[1],]  %>%  .[which(duplicated(.$ID_NR_VU)),] 
+
+for(i in 2:length(Weeksindex)){
+duplicated2 <-   Financial.diary %>% .[.$Weeknr == Weeksindex[i],]  %>%  .[which(duplicated(.$ID_NR_VU)),]
+if(nrow(duplicated2) != 0){
+duplicated <- rbind(duplicated,duplicated2)
+}
+}
+
+# No duplicated values
+```
+
+## Attrition Rate
+
+```{r}
+#Attrition Table
+#Attrition Table
+unique(Financial.diary$GroupNr)
+
+index1 <- unique(Financial.diary$Weeknr)
+ID_NR_VU <- numeric()
+Group <- numeric()
+Week <- numeric()
+RWA005 <- character()
+nRWA005 <- numeric()
+RWA006 <- character()
+nRWA006 <- numeric()
+RWA008 <- character()
+nRWA008 <- numeric()
+RWA015 <- character()
+nRWA015 <- numeric()
+RWA019 <- character()
+nRWA019 <- numeric()
+RWA020 <- character()
+nRWA020 <- numeric()
+RWA025 <- character()
+nRWA025 <- numeric()
+RWA026 <- character()
+nRWA026 <- numeric()
+counter <- 0
+for(k in 1:length(index1)){
+counter <- counter + 1
+Plot <- Financial.diary[Financial.diary$Weeknr == index1[k],]
+Group[counter] <- length(unique(Plot$GroupNr))
+ID_NR_VU[counter] <- nrow(Plot)
+Week[counter] <- index1[k]
+RWA005[counter] <- ifelse("RWA005" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA005[counter] <- nrow(Plot[Plot$GroupNr == "RWA005",])
+
+RWA006[counter] <- ifelse("RWA006" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA006[counter] <- nrow(Plot[Plot$GroupNr == "RWA006",])
+
+RWA008[counter] <- ifelse("RWA008" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA008[counter] <-  nrow(Plot[Plot$GroupNr == "RWA008",])
+
+RWA015[counter] <- ifelse("RWA015" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA015[counter] <-  nrow(Plot[Plot$GroupNr == "RWA015",])
+
+RWA019[counter] <- ifelse("RWA019" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA019[counter] <- nrow(Plot[Plot$GroupNr == "RWA019",])
+
+RWA020[counter] <- ifelse("RWA020" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA020[counter] <-  nrow(Plot[Plot$GroupNr == "RWA020",])
+
+RWA025[counter] <- ifelse("RWA025" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA025[counter] <-  nrow(Plot[Plot$GroupNr == "RWA025",])
+
+RWA026[counter] <- ifelse("RWA026" %in% unique(Plot$GroupNr), "Yes", "No")
+nRWA026[counter] <-  nrow(Plot[Plot$GroupNr == "RWA026",])
+}
+
+
+table2 <- data.frame(Week, n = ID_NR_VU, Groups = Group,n5 = nRWA005,n6 = nRWA006,n8 = nRWA008, n15 = nRWA015,n19 =nRWA019, n20 = nRWA020, n25 = nRWA025, n26 = nRWA026)
+
+
+index <- unique(All_Rwanda_B$Rgroupnr)
+Group2 <- character()
+Groupcount <- numeric()
+for(i in 1:length(index)){
+  Group2[i] <- as.character(index[i])
+    Groupcount[i] <- nrow(All_Rwanda_B[All_Rwanda_B$Rgroupnr == index[i],])
+}
+
+
+table4 <- data.frame(Week  = -1, n = sum(Groupcount), Groups = length(index),n5 = Groupcount[1],n6 = Groupcount[2],n8 = Groupcount[3], n15 = Groupcount[4], n19 = Groupcount[5], n20 = Groupcount[6],  n25 = Groupcount[7], n26 = Groupcount[8])
+
+Finaltable <- rbind(table4,table2)
+
+Week <- numeric()
+Maximumsum <- numeric()
+for(i in 1:100){
+maxtable <- Finaltable[Finaltable$Week == index1[i],]
+Maximumamount <- Finaltable[Finaltable$Week == -1,4:ncol(Finaltable)]
+Week[i] <- index1[i]
+Maximumsum[i] <- sum(Maximumamount[maxtable[,4:ncol(Finaltable)] != 0])
+}
+Maxamount <- cbind(Week,Maximumsum)
+
+Finaltable <- merge(Finaltable,Maxamount)
+
+
+long <- data.table::melt(Finaltable, id.vars = c("Week","n", "Groups","Maximumsum"), variable.name = "group")
+
+#1  plot groups
+ggplot(data=long, aes(x=Week, y=Groups)) +
+  geom_bar(stat="identity")
+
+
+#1 plot response rate
+ggplot(data=long) +
+  geom_line(aes(x=Week, y = n)) +
+  geom_line(aes(x=Week, y = Maximumsum)) +
+  geom_bar(aes(x=Week, y = Groups), stat="identity",  position = 'dodge')
+
+
+# 1 plot if everyone would have been there
+library("ggpubr")
+a <- ggplot(data=long) +
+  geom_bar(aes(x=Week, y = n, fill="Total Respondents"), stat="identity",  position = 'dodge') +
+  scale_x_continuous(breaks=c(0,4,14,26,52,59,78,84,100)) +
+  ylab("Number of Women") +
+  xlab("Week") +
+  scale_fill_manual(values = c("grey69")) +
+  theme(legend.title = element_blank()) 
+
+b <- ggplot(data=long) +
+  geom_point(aes(x=Week, y = Groups, color = "Amount Groups"), stat="identity") +
+  scale_x_continuous(breaks=c(0,4,14,26,52,59,78,84,100)) +
+  geom_segment(aes(x = 4, xend = 4), y = 0, yend = 9, linetype="dashed") +
+  geom_segment(aes(x = 14, xend = 14), y = 0, yend = 9, linetype="dashed") +
+  geom_segment(aes(x = 59, xend = 59), y = 0, yend = 9, linetype="dashed") +
+  geom_segment(aes(x = 84, xend = 84), y = 0, yend = 9, linetype="dashed") +
+  geom_segment(aes(x = 100, xend = 100), y = 0, yend = 9, linetype="dashed") +
+  ylab("Number of Groups") +
+  xlab("Week") +
+  theme(legend.title = element_blank()) 
+
+figure <- ggarrange(b,a, nrow = 2, align = "hv")
+annotate_figure(figure)
+
+png('figure_Attrition.png',height = 10, width = 18, units = 'cm', res = 600)
+plot(figure)
+dev.off()
+```
+
+
+
+```{r setup, include=FALSE}
+index <- c("ID_NR_VU", "Cstartdate","StartMonth","Rgroupnr","age_1","HusbandPartnerSameHousehold","HusbandPartnerNotSameHousehold","PartnerDied", "NoPartner", "howmanyHHM_1","insurance2", "NoOccupation_Daylabourer", "Farmer", "InformalWork"
+,"schoolcompleted", "schoolatt2", "school2", "livestocksum","prodsum","savinghowmuch_1", "savinghowmuch_2", "savinghowmuch_3","debtamount_1")
+
+All_Rwanda_B_short <- All_Rwanda_B %>% dplyr::select(index)
+
+BaselineCharacteristics <- All_Rwanda_B  %>% dplyr::select(index[-c(1:3)]) %>%  psych::describe(., fast = T)  %>% as.data.frame()  %>% round(.,2)
+
+table <- flextable(BaselineCharacteristics)
+
+```
+
+
+```{r setup, include=FALSE}
+index <- c("ID_NR_VU", "Weeknr","Total_Basicneed_expenditure", "Total_Basicneed_expenditure_short", "Total_BusinessInvestment", "Total_AssetsInvestment", "Total_RealEstateInvestment", "Total_Investment", "Total_income", "Total_income_without", "Food")
+
+Financial.diary.short <- Financial.diary %>% dplyr::select(index)
+
+BaselineCharacteristicsFinancial <- Financial.diary.short  %>% .[.$Weeknr == "1",] %>%  psych::describe(., fast = T)  %>% as.data.frame() %>% round(.,2)
+
+tableFinancial <- flextable(BaselineCharacteristicsFinancial)
+save_as_docx(tableFinancial, values = NULL,path = "/Users/annalangener/Desktop/OneDrive/Masterthesis/table.docx")
+```
+
+
+##Combine data frames
+
+```{r setup, include=FALSE}
+index <- c("ID_NR_VU", "Weeknr","Total_Basicneed_expenditure", "Total_Basicneed_expenditure_short", "Total_BusinessInvestment", "Total_AssetsInvestment", "Total_RealEstateInvestment", "Total_Investment", "Total_income", "Total_income_without", "Food")
+
+Financial.diary.short <- Financial.diary %>% dplyr::select(index)
+
+
+All_Rwanda_B <- merge(All_Rwanda_B, Inflation, by = "Cstartdate")
+
+index2 <- c("ID_NR_VU", "Cstartdate","StartMonth","Rgroupnr","age_1","HusbandPartnerSameHousehold","HusbandPartnerNotSameHousehold","PartnerDied", "NoPartner", "howmanyHHM_1","insurance2", "StreetVendor","Shopkeeper","MakingSellingFood","MarketVendor","MakingRepairClothes","MakingSellingBeer","Handcraft","Farmer","Daylabourer","Basketsmaker","NoOccupation","schoolcompleted",'NoOccupation_Daylabourer', 'Farmer', 'InformalWork', "schoolatt2", "school2", "livestocksum","prodsum","savinghowmuch_1", "savinghowmuch_2", "savinghowmuch_3","debtamount_1", 'CPI',	"FoodCPI",	"AlcoholicTobaccoCPI",	"ClothingCPI",	"HousingWaterElectricityCPI",	"FurnishingHouseholdEquipmentMaintenanceCPI",	"HealthCPI",	"TransportCPI",	"CommunicationCPI",	"EducationCPI",	 "MiscellaneousGoodsServicesCPI") 
+
+All_Rwanda_B_short2 <- All_Rwanda_B %>% dplyr::select(index2)
+
+
+Data_combined_Base<- merge(All_Rwanda_B_short2, Financial.diary.short, key = "ID_NR_VU", all = T)
+
+
+write.dta(Data_combined_Base,"Data_combined_Base.dta")
+write.csv(Data_combined_Base,"Data_combined_Base.csv")
+
+```
+
+#### Inflation
+```{r setup, include=FALSE}
+
+indexDate <- c(Inflation$Date)
+indexID <- unique(c(Data_combined_Base$ID_NR_VU))
+
+for(i in 1:length(indexID)){
+index <- which(indexDate == Data_combined_Base$Cstartdate[Data_combined_Base$ID_NR_VU == indexID[i]][1])
+
+indexMonth <- round(Data_combined_Base$Weeknr[Data_combined_Base$ID_NR_VU == indexID[i]]/4.33) + index
+ 
+Data_combined_Base$Date[Data_combined_Base$ID_NR_VU == indexID[i]] <- indexDate[indexMonth]
+}
+
+Data_combined_Base <- merge(Data_combined_Base, Inflation, by = "Date")
+
+Data_combined_Base <- tidyr::separate(Data_combined_Base, Date, into = c('Year', 'CurrentMonth'), sep = -2, convert = F)
+
+
+Data_combined_Base$Date2 <- as.Date(Data_combined_Base$Date, "%Y%m")
+All_Rwanda$StartMonth <- format(as.Date(All_Rwanda$Cstartdate), "%m")
+
+All_Rwanda$Cstartdate <- format(as.Date(All_Rwanda$Cstartdate), "%Y%m")
+
+## Load Inflation Rate
+Inflation <- as.data.frame(read.csv2("/Users/annalangener/Desktop/OneDrive/Masterthesis/Data Thesis/Inflation.csv", header = T))
+Inflation$Date <- as.Date(Inflation$Date, "%d.%m.%y")
+Inflation$Date <- format(as.Date(Inflation$Date), "%Y%m")
+Inflation$Cstartdate <- Inflation$Date 
+
+
+#Startdate.x -> actual startdate from baseline
+#Startdate.y & Date -> date from observation
+
+ValueCPI <- Data_combined_Base$CPI.x[Data_combined_Base$Cstartdate.x == 201709][1]
+ValueFood <- Data_combined_Base$FoodCPI.x[Data_combined_Base$Cstartdate.x == 201709][1]
+
+
+Data_combined_Base$Inflation <- (Data_combined_Base$CPI.y-ValueCPI)/ValueCPI
+Data_combined_Base$InflationFood <- (Data_combined_Base$FoodCPI.y-ValueFood)/ValueFood
+
+##### Inflation
+Data_combined_Base$InflationTotal_Basicneed_expenditure <- Data_combined_Base$Total_Basicneed_expenditure*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_Basicneed_expenditure_short <- Data_combined_Base$Total_Basicneed_expenditure_short*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_BusinessInvestment <- Data_combined_Base$Total_BusinessInvestment*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_AssetsInvestment <- Data_combined_Base$Total_AssetsInvestment*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_RealEstateInvestment <- Data_combined_Base$Total_RealEstateInvestment*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_Investment <- Data_combined_Base$Total_Investment*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_income <- Data_combined_Base$Total_income*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_income_without <- Data_combined_Base$Total_income_without*(1+Data_combined_Base$Inflation)
+Data_combined_Base$InflationTotal_Food <- Data_combined_Base$Food*(1+Data_combined_Base$InflationFood)
+
+max(Data_combined_Base$Weeknr)
+write.csv(Data_combined_Base, "Data_combined_Base.csv")
+write.dta(Data_combined_Base, "Data_combined_Base.dta")
+
+
+InflationPlot <- data.frame(Value_Inflation = Data_combined_Base$Inflation, Date = Data_combined_Base$Date, Value_CPI = Data_combined_Base$CPI.y)
+
+
+ggplot(aes(x = as.factor(Date), y = Value_Inflation ), data = InflationPlot[,1:2]) +
+  geom_col(position = "dodge") +
+  ylab("Inflation (in %)") +
+   xlab("Year/Month") 
+  
+Data_combined_Base$StartMonth
+
+ggplot(aes(as.factor(Date),Value_CPI ), data =InflationPlot[,2:3]) + geom_col(position = "dodge")
+```
+
+```{r eval=FALSE, include=FALSE}
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_Basicneed_expenditure_t0=InflationTotal_Basicneed_expenditure[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_Basicneed_expenditure_short_t0=InflationTotal_Basicneed_expenditure_short[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_BusinessInvestment_t0=InflationTotal_BusinessInvestment[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_AssetsInvestment_t0=InflationTotal_AssetsInvestment[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_RealEstateInvestment_t0=InflationTotal_RealEstateInvestment[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_Investment_t0=InflationTotal_Investment[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_income_t0=InflationTotal_income[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_income_without_t0=InflationTotal_income_without[Weeknr = 1])
+
+Data_combined_Base <- Data_combined_Base %>% group_by(ID_NR_VU) %>% 
+    mutate(InflationTotal_Food_t0=InflationTotal_Food[Weeknr = 1])
+
+
+Data_combined_Base <- fastDummies::dummy_cols(Data_combined_Base, select_columns = "CurrentMonth")
+Data_combined_Base <- fastDummies::dummy_cols(Data_combined_Base, select_columns = "Rgroupnr")
+write.csv(Data_combined_Base, "Data_combined_Base.csv")
+write.dta(Data_combined_Base, "Data_combined_Base.dta")
+Data_combined_Base
+```
+
+################# DATA COMBINED BASE ######################
+###########################################################
+ 
+```{r eval=FALSE, include=FALSE}
+
+Data_combined_Base$Month <- recode(Data_combined_Base$Cstartdate.y,  "12018" = "Jan",  "12019" = "Jan",  "12020" = "Jan",  "22018" = "Feb",  "22019" = "Feb",  "22020" = "Feb", "32018" = "Mar", "201803" = "Mar",  "32019" = "Mar",  "42018" = "Mar", "42019" = "April",  "52018" = "May",  "52019" = "May",  "62018" = "June", "62019" = "June", "72018" = "July",  "72019" = "July",  "82018" = "Aug",  "82019" = "Aug", "92017" = "Sep",  "92018" = "Sep",  "92019" = "Sep", "102017" = "Oct", "102018" = "Oct", "102019" = "Oct", "112017" = "Nov", "112018" = "Nov", "112019" = "Nov", "122017" = "Dec", "122018" = "Dec", "122019" = "Dec")
+
+
+
+Data_combined_Base$GroupTimeDummy[Data_combined_Base$Cstartdate.x == "92017" |Data_combined_Base$Cstartdate.x == "112017"|Data_combined_Base$Cstartdate.x == "122017"] <- 1
+                                  
+Data_combined_Base$GroupTimeDummy[Data_combined_Base$Cstartdate.x == "52018"] <- 2
+
+Data_combined_Base$GroupTimeDummy[Data_combined_Base$Cstartdate.x == "112018" |Data_combined_Base$Cstartdate.x == "122018"] <- 3
+                                                                   Data_combined_Base$GroupTimeDummy[Data_combined_Base$Cstartdate.x == "112019"] <- 4
+
+                                                                   Data_combined_Base$GroupTimeDummy[Data_combined_Base$Cstartdate.x == "12020"] <- 4
+                                                                  
+res.aov <- aov(InflationTotal_Basicneed_expenditure_short ~ GroupTimeDummy, data = Data_combined_Base[Data_combined_Base$Weeknr == 1,])
+summary(res.aov)
+
+
+res.aov <- aov(InflationTotal_income_without ~ GroupTimeDummy, data = Data_combined_Base[Data_combined_Base$Weeknr == 1,])
+summary(res.aov)
+
+
+Data_combined_Base$treatment <- 0
+Data_combined_Base$treatment[Data_combined_Base$Cstartdate.x == "201711"|Data_combined_Base$Cstartdate.x == "201712"] <- 1
+
+ Data_combined_Base$control <- 0
+ Data_combined_Base$control[Data_combined_Base$Cstartdate.x == "201811" |Data_combined_Base$Cstartdate.x == "201812"] <- 1
+ 
+Testset <- Data_combined_Base[Data_combined_Base$treatment == 1 | Data_combined_Base$control == 1,]
+
+test <- lm(InflationTotal_income_without ~ as.factor(control), data = Testset[Testset$Weeknr == 1,])
+summary(test)
+
+
+
+Data_combined_Base$DummyYeah <- 0
+Data_combined_Base$DummyYeah[Data_combined_Base$Cstartdate.x == "112017"|Data_combined_Base$Cstartdate.x == "122017"] <- 1
+
+ Data_combined_Base$DummyYeah[Data_combined_Base$Cstartdate.x == "112018" |Data_combined_Base$Cstartdate.x == "122018"] <- 2
+ 
+TestsetYeah <- Data_combined_Base[Data_combined_Base$DummyYeah != 0 ,]
+
+test <- lm(InflationTotal_income_without ~ as.factor(DummyYeah), data = TestsetYeah[TestsetYeah$Weeknr == 1,])
+summary(test)
+
+
+
+TestsetYeah$Date2 <- recode(TestsetYeah$Cstartdate.y,  "12018" = 201801,  "12019" = 201901,  "12020" = 202001,  "22018" = 201802,  "22019" = 201902,  "22020" = 202002, "32018" = 201803,  "32019" = 201903,  "42018" = 201804, "42019" = 201904,  "52018" = 201805,  "52019" = 201905,  "62018" = 201806, "62019" = 201906, "72018" = 201807,  "72019" = 201907,  "82018" = 201808,  "82019" = 201908, "92017" = 201709,  "92018" = 201809,  "92019"=201909, "102017" = 201710, "102018" = 201810, "102019" = 201910, "112017" = 201711, "112018" = 201811, "112019" = 201911, "122017" = 201712, "122018" = 201812, "122019" = 201912)
+
+
+TestsetYeah2 <- TestsetYeah[TestsetYeah$Date2 >= 201812,]
+
+summary(lm(InflationTotal_income_without ~ as.factor(treatment) + Date2 + Date2*as.factor(treatment), data = TestsetYeah2))
+```
+ 
+#### Data Ananalysis
+## Table Overview T-Test
+```{r eval=FALSE, include=FALSE}
+
+variables <- c("InflationTotal_Basicneed_expenditure", "InflationTotal_Basicneed_expenditure_short", "InflationTotal_BusinessInvestment", "InflationTotal_AssetsInvestment", "InflationTotal_Investment", "InflationTotal_income_without", "InflationTotal_Food")
+
+#Table
+Week1 <- Data_combined_Base[Data_combined_Base$Weeknr == "1",] %>% dplyr::select(variables) %>%  psych::describe(., fast = T)  %>% as.data.frame() %>% .[,1:4]  %>% round(.,2)
+
+Week26 <- Data_combined_Base[Data_combined_Base$Weeknr == "26",] %>% dplyr::select(variables) %>%  psych::describe(., fast = T)  %>% as.data.frame() %>% .[,1:4]  %>% round(.,2)
+
+Week52 <- Data_combined_Base[Data_combined_Base$Weeknr == "52",] %>% dplyr::select(variables) %>%  psych::describe(., fast = T)  %>% as.data.frame() %>% .[,1:4]  %>% round(.,2)
+
+Week100 <-Data_combined_Base[Data_combined_Base$Weeknr == "100",] %>% dplyr::select(variables) %>%  psych::describe(., fast = T)  %>% as.data.frame() %>% .[,1:4] %>% round(.,2)
+
+
+variable <- character()
+test <- numeric()
+tvalue <- numeric()
+pvalue <- numeric()
+counter <- 0
+for(i in 1:length(variables)){
+counter <- counter + 1
+A <- Data_combined_Base[Data_combined_Base$Week == "1",] %>% dplyr::select(variables[i])
+B <- Data_combined_Base[Data_combined_Base$Week == "26",] %>% dplyr::select(variables[i])
+
+variable[counter] <- variables[i]
+test<- t.test(A, B)
+tvalue[counter] <- round(test$statistic,2)
+pvalue[counter] <- round(test$p.value,2)
+}
+
+tresult1 <- cbind(vars = variable, tvalue, pvalue)
+
+
+
+variable <- character()
+test <- numeric()
+tvalue <- numeric()
+pvalue <- numeric()
+counter <- 0
+for(i in 1:length(variables)){
+counter <- counter + 1
+A <- Data_combined_Base[Data_combined_Base$Week == "1",] %>% dplyr::select(variables[i])
+B <- Data_combined_Base[Data_combined_Base$Week == "52",] %>% dplyr::select(variables[i])
+
+variable[counter] <- variables[i]
+test<- t.test(A, B)
+tvalue[counter] <- round(test$statistic,2)
+pvalue[counter] <- round(test$p.value,2)
+}
+
+tresult2 <- cbind(vars = variable, tvalue, pvalue)
+
+
+
+
+variable <- character()
+test <- numeric()
+tvalue <- numeric()
+pvalue <- numeric()
+counter <- 0
+for(i in 1:length(variables)){
+counter <- counter + 1
+A <- Data_combined_Base[Data_combined_Base$Week == "1",] %>% dplyr::select(variables[i])
+B <- Data_combined_Base[Data_combined_Base$Week == "100",] %>% dplyr::select(variables[i])
+
+variable[counter] <- variables[i]
+test<- t.test(A, B)
+tvalue[counter] <- round(test$statistic,2)
+pvalue[counter] <- round(test$p.value,2)
+}
+
+tresult3 <- cbind(vars = variable, tvalue, pvalue)
+
+
+
+table1 <- cbind(Week1)
+table1$sd <- paste("(",table1$sd,")", sep ="")
+table1 <- unite(table1,mean_sd, mean:sd, sep = " ")
+table1 <- table1[,-1]
+
+
+table2 <- cbind(Week26,tresult1)
+table2$sd <- paste("(",table2$sd,")", sep ="")
+table2 <- unite(table2,mean_sd, mean:sd, sep = " ")
+table2 <- table2[,-1]
+
+
+table3 <- cbind(Week52,tresult2)
+table3$sd <- paste("(",table3$sd,")", sep ="")
+table3 <- unite(table3,mean_sd, mean:sd, sep = " ")
+table3 <- table3[,-1]
+
+table4 <- cbind(Week100,tresult3)
+table4$sd <- paste("(",table4$sd,")", sep ="")
+table4 <- unite(table4,mean_sd, mean:sd, sep = " ")
+table4 <- table4[,-1]
+
+table <- cbind(table1, table2, table3, table4)
+
+table <- flextable(cbind(variables,table[,-1]))
+save_as_docx(table, values = NULL,path = "/Users/annalangener/Desktop/OneDrive/Masterthesis/table2.docx")
+
+```
+
+
+## Plots
+```{r}
+c("Total_Basicneed_expenditure", "Total_Basicneed_expenditure_short", "Total_BusinessInvestment", "Total_AssetsInvestment", "Total_RealEstateInvestment", "Total_Investment", "Total_income", "Total_income_without", "Food")
+
+
+#### Basic needs
+
+index1 <- unique(Data_combined_Base$Weeknr)
+Week <- numeric()
+AverageTotal_Basicneed_expenditure <- numeric()
+AverageTotal_Basicneed_expenditure_short  <- numeric()
+
+AverageInflationTotal_Basicneed_expenditure <- numeric()
+AverageInflationTotal_Basicneed_expenditure_short  <- numeric()
+
+Group <- numeric()
+counter <- 0
+ID_NR_VU <- numeric()
+
+for(k in 1:length(index1)){
+counter <- counter + 1
+Plot <- Data_combined_Base[Data_combined_Base$Weeknr == index1[k],]
+Group[counter] <- length(unique(Plot$GroupNr))
+ID_NR_VU[counter] <- length(unique(Plot$ID_NR_VU))
+Week[counter] <- index1[k]
+
+AverageTotal_Basicneed_expenditure[counter] <- mean(Plot$Total_Basicneed_expenditure)
+AverageTotal_Basicneed_expenditure_short[counter]  <- mean(Plot$Total_Basicneed_expenditure_short)
+
+AverageInflationTotal_Basicneed_expenditure[counter] <- mean(Plot$InflationTotal_Basicneed_expenditure)
+AverageInflationTotal_Basicneed_expenditure_short[counter]  <- mean(Plot$InflationTotal_Basicneed_expenditure_short)
+
+}
+
+
+Group_average <- as.data.frame(cbind(Week,AverageTotal_Basicneed_expenditure, AverageTotal_Basicneed_expenditure_short,AverageInflationTotal_Basicneed_expenditure, AverageInflationTotal_Basicneed_expenditure_short))
+
+figure1 <- ggplot(Group_average) +
+  geom_line(aes(Week,AverageInflationTotal_Basicneed_expenditure, color = "Total basic needs expenditure adjusted for Inflation")) +
+  geom_line(aes(Week,AverageInflationTotal_Basicneed_expenditure_short, color = "Total basic needs expenditure short adjusted for Inflation")) +
+  ylab("Average Level Basic Need Expenditure") +
+  xlab("Program Week") +
+  geom_smooth(aes(Week,AverageInflationTotal_Basicneed_expenditure),method = "lm", color="#F8766D") +
+  geom_smooth(aes(Week,AverageInflationTotal_Basicneed_expenditure_short), method = "lm", color="#00BFC4") +
+  theme(legend.title = element_blank())
+
+
+png('figure_Basic needs.png',height = 10, width = 20, units = 'cm', res = 600)
+plot(figure1)
+dev.off()
+
+#### Investment
+
+index1 <- unique(Data_combined_Base$Weeknr)
+Week <- numeric()
+
+AverageTotal_BusinessInvestment  <- numeric()
+AverageTotal_AssetsInvestment  <- numeric()
+AverageTotal_RealEstateInvestment  <- numeric()
+AverageTotal_Investment  <- numeric()
+
+InflationAverageTotal_BusinessInvestment  <- numeric()
+InflationAverageTotal_AssetsInvestment  <- numeric()
+InflationAverageTotal_RealEstateInvestment  <- numeric()
+InflationAverageTotal_Investment  <- numeric()
+
+Group <- numeric()
+counter <- 0
+ID_NR_VU <- numeric()
+
+for(k in 1:length(index1)){
+counter <- counter + 1
+Plot <- Data_combined_Base[Data_combined_Base$Weeknr == index1[k],]
+Group[counter] <- length(unique(Plot$GroupNr))
+ID_NR_VU[counter] <- length(unique(Plot$ID_NR_VU))
+Week[counter] <- index1[k]
+
+AverageTotal_BusinessInvestment[counter]  <- mean(Plot$Total_BusinessInvestment)
+AverageTotal_AssetsInvestment[counter]  <- mean(Plot$Total_AssetsInvestment)
+AverageTotal_RealEstateInvestment[counter]  <- mean(Plot$Total_RealEstateInvestment)
+AverageTotal_Investment[counter]  <- mean(Plot$Total_Investment)
+
+InflationAverageTotal_BusinessInvestment[counter]  <- mean(Plot$InflationTotal_BusinessInvestment)
+InflationAverageTotal_AssetsInvestment[counter]  <- mean(Plot$InflationTotal_AssetsInvestment)
+InflationAverageTotal_RealEstateInvestment[counter]  <- mean(Plot$InflationTotal_RealEstateInvestment)
+InflationAverageTotal_Investment[counter]  <- mean(Plot$InflationTotal_Investment)
+
+}
+Group_average <- as.data.frame(cbind(Week, AverageTotal_BusinessInvestment, AverageTotal_AssetsInvestment, AverageTotal_RealEstateInvestment, AverageTotal_Investment, InflationAverageTotal_BusinessInvestment, InflationAverageTotal_AssetsInvestment, InflationAverageTotal_RealEstateInvestment, InflationAverageTotal_Investment))
+
+
+figure2 <- ggplot(Group_average) +
+   geom_line(aes(Week,InflationAverageTotal_BusinessInvestment, color = "Total business investment adjusted for inflation")) +
+  geom_line(aes(Week,InflationAverageTotal_AssetsInvestment, color = "Total asset investment adjusted for inflation")) +
+  geom_line(aes(Week,InflationAverageTotal_Investment, color = "Total investment adjusted for inflation")) +
+   geom_smooth(aes(Week,InflationAverageTotal_BusinessInvestment),method = "lm", color="#00BA38") +
+  geom_smooth(aes(Week,InflationAverageTotal_AssetsInvestment), method = "lm", color="#F8766D") +
+  geom_smooth(aes(Week,InflationAverageTotal_Investment), method = "lm", color="#619CFF") +
+   ylab("Average Level Productive Expenditure") +
+  xlab("Program Week") +
+  theme(legend.title = element_blank())
+
+png('figure_Investment.png',height = 10, width = 20, units = 'cm', res = 600)
+plot(figure2)
+dev.off()
+
+
+#### Income
+
+index1 <- unique(Data_combined_Base$Weeknr)
+Week <- numeric()
+
+AverageTotal_income  <- numeric() 
+AverageTotal_income_without  <- numeric()
+InflationAverageTotal_income  <- numeric() 
+InflationAverageTotal_income_without  <- numeric()
+
+Group <- numeric()
+counter <- 0
+ID_NR_VU <- numeric()
+
+for(k in 1:length(index1)){
+counter <- counter + 1
+Plot <- Data_combined_Base[Data_combined_Base$Weeknr == index1[k],]
+Group[counter] <- length(unique(Plot$GroupNr))
+ID_NR_VU[counter] <- length(unique(Plot$ID_NR_VU))
+Week[counter] <- index1[k]
+
+AverageTotal_income[counter]  <- mean(Plot$Total_income)
+AverageTotal_income_without[counter]  <- mean(Plot$Total_income_without)
+InflationAverageTotal_income[counter]  <- mean(Plot$InflationTotal_income)
+InflationAverageTotal_income_without[counter]  <- mean(Plot$InflationTotal_income_without)
+
+}
+Group_average <- as.data.frame(cbind(Week, AverageTotal_income, AverageTotal_income_without, InflationAverageTotal_income, InflationAverageTotal_income_without))
+
+
+figure3 <- ggplot(Group_average) +
+  geom_line(aes(Week,InflationAverageTotal_income_without, color = "Total net income adjusted for inflation")) +
+   geom_smooth(aes(Week,InflationAverageTotal_income_without),method = "lm", color="#F8766D") +
+    ylab("Average Income") +
+  xlab("Program Week") +
+  theme(legend.title = element_blank())
+
+
+png('figure_Income.png',height = 10, width = 20, units = 'cm', res = 600)
+plot(figure3)
+dev.off()
+
+
+#### Food Security
+
+index1 <- unique(Data_combined_Base$Weeknr)
+Week <- numeric()
+
+AverageFood  <- numeric()
+InflationAverageFood  <- numeric()
+
+
+Group <- numeric()
+counter <- 0
+ID_NR_VU <- numeric()
+
+for(k in 1:length(index1)){
+counter <- counter + 1
+Plot <- Data_combined_Base[Data_combined_Base$Weeknr == index1[k],]
+Group[counter] <- length(unique(Plot$GroupNr))
+ID_NR_VU[counter] <- length(unique(Plot$ID_NR_VU))
+Week[counter] <- index1[k]
+
+AverageFood[counter]  <- mean(Plot$Food, na.rm = T)
+InflationAverageFood[counter]  <- mean(Plot$InflationTotal_Food, na.rm = T)
+
+}
+Group_average <- as.data.frame(cbind(Week,AverageFood,InflationAverageFood))
+
+figure4 <- ggplot(Group_average) +
+  geom_line(aes(Week,InflationAverageFood, color = "Food expenditure adjusted for Inflation")) +
+   geom_smooth(aes(Week,InflationAverageFood), method = "lm", color="#F8766D") +
+   ylab("Food Expenditure") +
+  xlab("Program Week") +
+  theme(legend.title = element_blank())
+
+png('figure_Food.png',height = 10, width = 20, units = 'cm', res = 600)
+plot(figure4)
+dev.off()
+```
+
