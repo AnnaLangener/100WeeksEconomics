@@ -1,0 +1,141 @@
+---
+title: "Testset"
+author: "Anna Langener"
+date: "6/25/2020"
+output:
+  html_document: default
+  word_document: default
+---
+
+
+```{r include=FALSE}
+library(lmerTest)
+library(psych)
+library(ggplot2)
+library(kableExtra)
+library(tidyverse)
+library(tidyselect)
+library(dplyr)
+library(foreign)
+library(xtable)
+library(ltm)
+library(flextable)
+library(qgraph)
+library(graphicalVAR)
+library(psychonetrics)
+library(lavaan)
+library(semPlot)
+library(tidyr)
+library(ggcorrplot)
+library(qwraps2)
+library(lme4)
+library(lmerTest)
+library(nlme)
+library(stargazer)
+
+Data_combined_Base <- as.data.frame(read.csv("/Users/annalangener/Desktop/OneDrive/Masterthesis/Psychology/Data_combined_Base.csv", header = T))
+
+
+variables <- c("InflationTotal_Basicneed_expenditure", "InflationTotal_Basicneed_expenditure_short", "InflationTotal_BusinessInvestment", "InflationTotal_AssetsInvestment", "InflationTotal_Investment", "InflationTotal_income_without", "InflationTotal_Food")
+
+
+Bvariables <- c("InflationTotal_Basicneed_expenditure_t0", "InflationTotal_Basicneed_expenditure_short_t0", "InflationTotal_BusinessInvestment_t0", "InflationTotal_AssetsInvestment_t0", "InflationTotal_Investment_t0", "InflationTotal_income_without_t0", "InflationTotal_Food_t0")
+
+
+
+
+
+Data_combined_Base$treatment <- 0
+Data_combined_Base$treatment[Data_combined_Base$Cstartdate.x == "201711"|Data_combined_Base$Cstartdate.x == "201712"] <- 1
+
+Data_combined_Base$control <- 0
+Data_combined_Base$control[Data_combined_Base$Cstartdate.x == "201811" |Data_combined_Base$Cstartdate.x == "201812"] <- 1
+ 
+Testset <- Data_combined_Base[Data_combined_Base$treatment == 1 | Data_combined_Base$control == 1,]
+
+test <- lm(InflationTotal_income_without ~ as.factor(treatment), data = Testset[Testset$Weeknr == 1,])
+summary(test)
+
+Testset_short <- Testset[Testset$Cstartdate.y >= "201812",]
+
+
+#RWA006 
+RWA6 <- Testset_short[Testset_short$Rgroupnr == "RWA006",]
+min(RWA6$Weeknr) #55
+
+Testset_short$Weeknr2[Testset_short$Rgroupnr == "RWA006"] <- Testset_short$Weeknr[Testset_short$Rgroupnr == "RWA006"] - 54
+
+#RWA008
+RWA8 <- Testset_short[Testset_short$Rgroupnr == "RWA008",]
+min(RWA8$Weeknr) #50
+
+Testset_short$Weeknr2[Testset_short$Rgroupnr == "RWA008"] <- Testset_short$Weeknr[Testset_short$Rgroupnr == "RWA008"] - 49
+
+#RWA019 
+RWA19 <- Testset_short[Testset_short$Rgroupnr == "RWA019",]
+min(RWA19$Weeknr) #3
+
+Testset_short$Weeknr2[Testset_short$Rgroupnr == "RWA019"] <- Testset_short$Weeknr[Testset_short$Rgroupnr == "RWA019"] - 2
+
+#RWA020
+RWA20 <- Testset_short[Testset_short$Rgroupnr == "RWA020",]
+min(RWA20$Weeknr) #1
+
+
+Testset_short$Weeknr2[Testset_short$Rgroupnr == "RWA020"] <- Testset_short$Weeknr[Testset_short$Rgroupnr == "RWA020"]
+
+
+```
+
+
+```{r include=FALSE}
+#1 Baseline
+fit1 <- lm(as.formula(paste(variables[1]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+fit2 <- lm(as.formula(paste(variables[2]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+fit3 <- lm(as.formula(paste(variables[3]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+fit4 <- lm(as.formula(paste(variables[4]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+fit5 <- lm(as.formula(paste(variables[5]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+fit6 <- lm(as.formula(paste(variables[6]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+fit7 <- lm(as.formula(paste(variables[7]," ~ as.factor(treatment)")), Testset[Testset$Weeknr == 1,])
+
+
+
+fit1_table1 <- invisible(stargazer(fit1, fit2, fit3, fit4, fit5, fit6, fit7, type = "html"))
+```
+
+
+```{r include=FALSE}
+#1 Baseline
+fit1 <- lm(as.formula(paste(variables[1]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit1_test <- clubSandwich::coef_test(fit1, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+fit2 <- lm(as.formula(paste(variables[2]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit2_test <- clubSandwich::coef_test(fit2, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+fit3 <- lm(as.formula(paste(variables[3]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit3_test <- clubSandwich::coef_test(fit3, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+fit4 <- lm(as.formula(paste(variables[4]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit4_test <- clubSandwich::coef_test(fit4, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+fit5 <- lm(as.formula(paste(variables[5]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit5_test <- clubSandwich::coef_test(fit5, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+fit6 <- lm(as.formula(paste(variables[6]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit6_test <- clubSandwich::coef_test(fit6, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+fit7 <- lm(as.formula(paste(variables[7]," ~ Weeknr2*as.factor(treatment)")), Testset_short)
+fit7_test <- clubSandwich::coef_test(fit7, vcov = "CR1", cluster = Testset_short$ID_NR_VU, test = "naive-t")
+
+
+
+fit1_table2 <- invisible(stargazer(fit1, fit2, fit3, fit4, fit5, fit6, fit7, type = "html",se=list(fit1_test$SE, fit2_test$SE, fit3_test$SE, fit4_test$SE, fit5_test$SE, fit6_test$SE, fit7_test$SE), p =list(fit1_test$p_t, fit2_test$p_t, fit3_test$p_t, fit4_test$p_t, fit5_test$p_t, fit6_test$p_t, fit7_test$p_t)))
+```
+
+Final Table
+
+```{r echo=TRUE}
+knitr::kable(fit1_table1, format = "html", escape = FALSE)
+knitr::kable(fit1_table2, format = "html", escape = FALSE)
+```
+
